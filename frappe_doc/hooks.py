@@ -41,6 +41,13 @@ app_license = "mit"
 
 # include js in page
 # page_js = {"page" : "public/js/file.js"}
+page_js = {"developer_portal": "page/developer_portal/developer_portal.js"}
+
+# The core Page doctype has no "route" field, so /doc is mapped to the desk
+# page via a website redirect (loaded at runtime, no migrate required).
+website_redirects = [
+	{"source": "/doc", "target": "/app/developer_portal"},
+]
 
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}
