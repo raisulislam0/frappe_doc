@@ -240,13 +240,7 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		state.activeTab = tab;
 		ui.tabApi.classList.toggle("active", tab === "api");
 		ui.tabDt.classList.toggle("active", tab === "doctype");
-		// Option lists differ per tab, so reset scope + term on every switch.
-		state.apiScope = "All";
-		state.apiSearch = "";
-		state.doctypeScope = "All";
-		state.doctypeSearch = "";
-		state.fieldScope = "All";
-		state.fieldSearch = "";
+		// Remove search resetting to cache the navigation state
 		updateHash();
 		renderTab();
 	}
@@ -423,7 +417,7 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		}
 		const groups = {};
 		apis.forEach(function (a) {
-			const key = a.doctype || "Uncategorized";
+			const key = a.app || "Uncategorized";
 			(groups[key] = groups[key] || []).push(a);
 		});
 		const keys = Object.keys(groups).sort(function (x, y) {
@@ -433,7 +427,7 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		});
 		keys.forEach(function (key) {
 			const g = el("div", "fd-group");
-			if (state.collapsedGroups[key]) g.classList.add("collapsed");
+			if (state.collapsedGroups[key] !== false) g.classList.add("collapsed");
 			const head = el("div", "fd-group-header");
 			const arrow = el("span", "fd-group-arrow", "\u25BE");
 			const label = el("span");
@@ -442,7 +436,7 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 			head.appendChild(arrow);
 			head.appendChild(label);
 			head.onclick = function () {
-				state.collapsedGroups[key] = !state.collapsedGroups[key];
+				state.collapsedGroups[key] = state.collapsedGroups[key] === false ? true : false;
 				g.classList.toggle("collapsed");
 			};
 			const items = el("div", "fd-group-items");
@@ -616,6 +610,9 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		const frappeSnippet = buildFrappeJsSnippet(a);
 		const curlSnippet = buildCurlSnippet(a);
 
+		const pd = a.parsed_doc || {};
+		const hasExamples = pd.example_request || pd.example_response;
+
 		const usage = el("div", "fd-usage collapsed");
 		const header = el("div", "fd-usage-header");
 		const arrow = el("span", "fd-usage-arrow", "\u25B6");
@@ -634,6 +631,13 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		tabCurl.type = "button";
 		tabs.appendChild(tabFrappe);
 		tabs.appendChild(tabCurl);
+
+		let tabExamples = null;
+		if (hasExamples) {
+			tabExamples = el("button", "fd-snippet-tab", "Examples");
+			tabExamples.type = "button";
+			tabs.appendChild(tabExamples);
+		}
 		body.appendChild(tabs);
 
 		const panelFrappe = el("div", "fd-snippet-panel active");
@@ -648,11 +652,19 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		const panelCurl = el("div", "fd-snippet-panel");
 		panelCurl.appendChild(buildCodeBlock(curlSnippet));
 
+		let panelExamples = null;
+		if (hasExamples) {
+			panelExamples = el("div", "fd-snippet-panel");
+			panelExamples.appendChild(buildExamplesPanel(pd));
+		}
+
 		function switchSnippetTab(active) {
 			tabFrappe.classList.toggle("active", active === "frappe");
 			tabCurl.classList.toggle("active", active === "curl");
 			panelFrappe.classList.toggle("active", active === "frappe");
 			panelCurl.classList.toggle("active", active === "curl");
+			if (tabExamples) tabExamples.classList.toggle("active", active === "examples");
+			if (panelExamples) panelExamples.classList.toggle("active", active === "examples");
 		}
 		tabFrappe.onclick = function (e) {
 			e.stopPropagation();
@@ -662,11 +674,43 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 			e.stopPropagation();
 			switchSnippetTab("curl");
 		};
+		if (tabExamples) {
+			tabExamples.onclick = function (e) {
+				e.stopPropagation();
+				switchSnippetTab("examples");
+			};
+		}
 
 		body.appendChild(panelFrappe);
 		body.appendChild(panelCurl);
+		if (panelExamples) body.appendChild(panelExamples);
 		usage.appendChild(body);
 		return usage;
+	}
+
+	// ---- Examples side-by-side panel ----
+	function buildExamplesPanel(pd) {
+		const hasBoth = pd.example_request && pd.example_response;
+		const layout = el("div", "fd-examples-layout" + (hasBoth ? "" : " single"));
+		if (pd.example_request) {
+			const col = el("div");
+			if (hasBoth) {
+				const lbl = el("div", "fd-examples-col-label", "Request");
+				col.appendChild(lbl);
+			}
+			col.appendChild(buildCodeBlock(pd.example_request));
+			layout.appendChild(col);
+		}
+		if (pd.example_response) {
+			const col = el("div");
+			if (hasBoth) {
+				const lbl = el("div", "fd-examples-col-label", "Response");
+				col.appendChild(lbl);
+			}
+			col.appendChild(buildCodeBlock(pd.example_response));
+			layout.appendChild(col);
+		}
+		return layout;
 	}
 
 	function methodBadges(a) {
@@ -715,6 +759,194 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		];
 	}
 
+	// ---- JSON syntax highlighter ----
+	function highlightJson(json) {
+		return json
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(
+				/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+				function (match) {
+					if (/^"/.test(match)) {
+						return /:$/.test(match)
+							? '<span class="fd-json-key">' + match + "</span>"
+							: '<span class="fd-json-str">' + match + "</span>";
+					}
+					if (/true|false/.test(match)) return '<span class="fd-json-bool">' + match + "</span>";
+					if (/null/.test(match)) return '<span class="fd-json-null">' + match + "</span>";
+					return '<span class="fd-json-num">' + match + "</span>";
+				}
+			);
+	}
+
+	// ---- Try it out section ----
+	function buildTryItSection(a) {
+		const pd = a.parsed_doc || {};
+		// Build a map of arg name -> example value from parsed doc args
+		const argExamples = {};
+		(pd.args || []).forEach(function (argInfo) {
+			argExamples[argInfo.name] = "";
+		});
+		// Pre-fill from example_request if it parses as JSON object
+		if (pd.example_request) {
+			try {
+				const ex = JSON.parse(pd.example_request);
+				if (ex && typeof ex === "object" && !Array.isArray(ex)) {
+					Object.keys(ex).forEach(function (k) {
+						argExamples[k] = typeof ex[k] === "string" ? ex[k] : JSON.stringify(ex[k]);
+					});
+				}
+			} catch (e) {}
+		}
+
+		const tryIt = el("div", "fd-try-it collapsed");
+		const header = el("div", "fd-try-it-header");
+		const arrow = el("span", "fd-try-it-arrow", "\u25B6");
+		const badge = el("span", "fd-try-it-badge", "TRY IT OUT");
+		header.appendChild(arrow);
+		header.appendChild(document.createTextNode(" "));
+		header.appendChild(badge);
+		header.onclick = function () {
+			tryIt.classList.toggle("collapsed");
+		};
+		tryIt.appendChild(header);
+
+		const body = el("div", "fd-try-it-body");
+		const inputs = {};
+
+		// Combine explicit python args and docstring args
+		let allArgs = [].concat(a.args || []);
+		if (pd.args) {
+			pd.args.forEach(function (argMeta) {
+				if (allArgs.indexOf(argMeta.name) === -1) {
+					allArgs.push(argMeta.name);
+				}
+			});
+		}
+
+		if (allArgs.length) {
+			const form = el("div", "fd-try-it-form");
+			allArgs.forEach(function (argName) {
+				const row = el("div", "fd-arg-input-row");
+				const labelEl = el("label", "fd-arg-input-label");
+				labelEl.textContent = argName;
+				// Attach type hint if available
+				const argMeta = (pd.args || []).find(function (x) { return x.name === argName; });
+				if (argMeta && argMeta.type) {
+					const small = document.createElement("small");
+					small.textContent = argMeta.type;
+					labelEl.appendChild(small);
+				}
+				const input = el("input", "fd-arg-input");
+				input.type = "text";
+				input.placeholder = argExamples[argName] ? argExamples[argName] : "value";
+				if (argExamples[argName]) input.value = argExamples[argName];
+				input.setAttribute("data-arg", argName);
+				row.appendChild(labelEl);
+				row.appendChild(input);
+				form.appendChild(row);
+				inputs[argName] = input;
+			});
+			body.appendChild(form);
+		} else {
+			const note = el("p", "fd-snippet-note", "This endpoint takes no arguments.");
+			body.appendChild(note);
+		}
+
+		const actions = el("div", "fd-try-actions");
+		const sendBtn = el("button", "fd-send-btn", "\u25B6\u2009Send Request");
+		const clearBtn = el("button", "fd-clear-btn", "Clear");
+		actions.appendChild(sendBtn);
+		actions.appendChild(clearBtn);
+		body.appendChild(actions);
+
+		let responseEl = null;
+
+		clearBtn.onclick = function () {
+			Object.values(inputs).forEach(function (inp) { inp.value = ""; });
+			if (responseEl && responseEl.parentNode) {
+				responseEl.parentNode.removeChild(responseEl);
+				responseEl = null;
+			}
+		};
+
+		sendBtn.onclick = function () {
+			sendBtn.disabled = true;
+			sendBtn.textContent = "\u23F3 Sending…";
+
+			// Collect args
+			const args = {};
+			Object.keys(inputs).forEach(function (k) {
+				const v = inputs[k].value;
+				if (v !== "") args[k] = v;
+			});
+
+			const t0 = Date.now();
+			frappe.call({
+				method: a.module_path,
+				args: args,
+				callback: function (r) {
+					const elapsed = Date.now() - t0;
+					sendBtn.disabled = false;
+					sendBtn.innerHTML = "\u25B6\u2009Send Request";
+					renderResponse(true, r.message, elapsed);
+				},
+				error: function (r) {
+					const elapsed = Date.now() - t0;
+					sendBtn.disabled = false;
+					sendBtn.innerHTML = "\u25B6\u2009Send Request";
+					const errMsg = (r && r.responseJSON && r.responseJSON.exc_type)
+						? r.responseJSON.exc_type + ": " + (r.responseJSON.exception || "")
+						: (r && r.statusText ? r.statusText : "Request failed");
+					renderResponse(false, errMsg, elapsed);
+				},
+			});
+		};
+
+		function renderResponse(ok, data, elapsed) {
+			if (responseEl && responseEl.parentNode) {
+				responseEl.parentNode.removeChild(responseEl);
+			}
+			responseEl = el("div", "fd-response-panel");
+
+			const rHeader = el("div", "fd-response-header");
+			const statusBadge = el(
+				"span",
+				"fd-response-status " + (ok ? "fd-status-ok" : "fd-status-err"),
+				ok ? "\u2705 200 OK" : "\u274C Error"
+			);
+			const timeEl = el("span", "fd-response-time", elapsed + " ms");
+			const copyBtn = el("button", "fd-response-copy", "Copy");
+
+			let prettyText;
+			try {
+				prettyText = JSON.stringify(typeof data === "string" ? JSON.parse(data) : data, null, 2);
+			} catch (e) {
+				prettyText = String(data);
+			}
+
+			copyBtn.onclick = function () { copyText(prettyText); };
+			rHeader.appendChild(statusBadge);
+			rHeader.appendChild(timeEl);
+			rHeader.appendChild(copyBtn);
+			responseEl.appendChild(rHeader);
+
+			const rBody = el("div", "fd-response-body");
+			const pre = document.createElement("pre");
+			try {
+				pre.innerHTML = highlightJson(prettyText);
+			} catch (e) {
+				pre.textContent = prettyText;
+			}
+			rBody.appendChild(pre);
+			responseEl.appendChild(rBody);
+			body.appendChild(responseEl);
+		}
+
+		tryIt.appendChild(body);
+		return tryIt;
+	}
 	function buildApiCard(a, term) {
 		const card = el("div", "fd-card");
 		card.id = cardId(a);
@@ -759,19 +991,73 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 			const args = el("div", "fd-args");
 			a.args.forEach(function (arg) {
 				const s = el("span", "fd-arg");
-				s.innerHTML = hl(arg, term);
+				let label = arg;
+				const pd = a.parsed_doc || {};
+				const argMeta = (pd.args || []).find(function (x) { return x.name === arg; });
+				if (argMeta && argMeta.type) {
+					label += ": " + argMeta.type;
+				}
+				s.innerHTML = hl(label, term);
 				args.appendChild(s);
 			});
 			card.appendChild(args);
 		}
 
-		card.appendChild(buildUsageSection(a));
-
-		if (a.docstring) {
+		// Docstring: prefer parsed summary+description; fall back to raw docstring
+		const pd = a.parsed_doc || {};
+		const displayDoc = (pd.summary || pd.description)
+			? [pd.summary, pd.description].filter(Boolean).join("\n\n")
+			: (a.docstring || "");
+		if (displayDoc) {
 			const d = el("p", "fd-doc");
-			d.innerHTML = hl(a.docstring, term);
+			d.innerHTML = hl(displayDoc, term);
 			card.appendChild(d);
 		}
+
+		// Arg description table (only if parsed_doc has arg descriptions)
+		const parsedArgs = (pd.args || []).filter(function (x) { return x.description || x.type; });
+		if (parsedArgs.length) {
+			const tbl = document.createElement("table");
+			tbl.className = "fd-arg-table";
+			const thead = document.createElement("thead");
+			const hrow = document.createElement("tr");
+			["Parameter", "Type", "Description"].forEach(function (h) {
+				const th = document.createElement("th");
+				th.textContent = h;
+				hrow.appendChild(th);
+			});
+			thead.appendChild(hrow);
+			tbl.appendChild(thead);
+			const tbody = document.createElement("tbody");
+			parsedArgs.forEach(function (arg) {
+				const tr = document.createElement("tr");
+				const tdName = document.createElement("td");
+				tdName.className = "fd-arg-name-cell";
+				tdName.textContent = arg.name;
+				const tdType = document.createElement("td");
+				tdType.className = "fd-arg-type";
+				tdType.textContent = arg.type || "";
+				const tdDesc = document.createElement("td");
+				tdDesc.textContent = arg.description || "";
+				tr.appendChild(tdName);
+				tr.appendChild(tdType);
+				tr.appendChild(tdDesc);
+				tbody.appendChild(tr);
+			});
+			tbl.appendChild(tbody);
+			card.appendChild(tbl);
+		}
+
+		// Returns note
+		if (pd.returns) {
+			const ret = el("div", "fd-meta");
+			ret.innerHTML = "<strong>Returns:</strong> " + esc(pd.returns);
+			card.appendChild(ret);
+		}
+
+		card.appendChild(buildUsageSection(a));
+		card.appendChild(buildTryItSection(a));
+
 		return card;
 	}
 
@@ -815,8 +1101,12 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		ui.content.appendChild(head);
 
 		const bodyEl = el("div", "fd-content-body");
+		state.dtTitleEl = el("h4");
+		state.dtTitleEl.style.margin = "0 0 12px 0";
+		state.dtTitleEl.style.color = "var(--fd-text)";
 		state.statsEl = el("div");
 		state.treeEl = el("div");
+		bodyEl.appendChild(state.dtTitleEl);
 		bodyEl.appendChild(state.statsEl);
 		bodyEl.appendChild(state.treeEl);
 		ui.content.appendChild(bodyEl);
@@ -902,6 +1192,7 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 
 	function renderDoctypeContent() {
 		if (!state.selectedDoctype) {
+			if (state.dtTitleEl) state.dtTitleEl.textContent = "";
 			state.fieldCountEl.textContent = "";
 			state.statsEl.innerHTML = "";
 			state.treeEl.innerHTML = "";
@@ -914,6 +1205,7 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 			}
 			return;
 		}
+		if (state.dtTitleEl) state.dtTitleEl.textContent = state.selectedDoctype;
 		if (state.fieldSearchCtl) {
 			state.fieldSearchCtl.input.disabled = false;
 			state.fieldSearchCtl.select.disabled = false;
