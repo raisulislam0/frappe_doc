@@ -622,13 +622,6 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		switchTab("doctype");
 		selectDoctype(name);
 	}
-	function openApi(a) {
-		switchTab("api");
-		setTimeout(function () {
-			scrollToCard(a);
-		}, 60);
-	}
-
 	// ================= DOCTYPE FIELD EXPLORER =================
 	function renderDoctypeTab() {
 		buildDoctypeContent();
@@ -662,11 +655,9 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		state.fieldCountEl = el("div", "fd-count");
 		state.statsEl = el("div");
 		state.treeEl = el("div");
-		state.relatedEl = el("div");
 		ui.content.appendChild(state.fieldCountEl);
 		ui.content.appendChild(state.statsEl);
 		ui.content.appendChild(state.treeEl);
-		ui.content.appendChild(state.relatedEl);
 	}
 
 	function fetchDoctypes(cb) {
@@ -751,7 +742,6 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		if (!state.selectedDoctype) {
 			state.fieldCountEl.textContent = "";
 			state.statsEl.innerHTML = "";
-			state.relatedEl.innerHTML = "";
 			state.treeEl.innerHTML = "";
 			state.treeEl.appendChild(
 				emptyMsg("Select a DocType from the sidebar to view its fields.")
@@ -769,7 +759,6 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 
 		if (state.schemaCache[state.selectedDoctype]) {
 			renderFieldArea();
-			renderRelated();
 			return;
 		}
 
@@ -782,13 +771,11 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 				if (msg && msg.error) {
 					state.fieldCountEl.textContent = "";
 					state.statsEl.innerHTML = "";
-					state.relatedEl.innerHTML = "";
 					showError(state.treeEl, msg.error);
 					return;
 				}
 				state.schemaCache[state.selectedDoctype] = msg || { fields: [] };
 				renderFieldArea();
-				renderRelated();
 			},
 			function () {
 				hideLoading();
@@ -932,41 +919,6 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 				"Showing " + st.total + " of " + st.total + " fields";
 			renderNodes(fields, 0, state.treeEl, "");
 		}
-	}
-
-	function renderRelated() {
-		state.relatedEl.innerHTML = "";
-		if (state.apis === null) {
-			call(
-				API_GET,
-				{},
-				function (msg) {
-					state.apis = msg && msg.apis ? msg.apis : [];
-					renderRelated();
-				},
-				function () {
-					state.apis = [];
-					renderRelated();
-				}
-			);
-			return;
-		}
-		const related = state.apis.filter(function (a) {
-			return a.doctype === state.selectedDoctype;
-		});
-		const wrap = el("div", "fd-related");
-		wrap.appendChild(el("h3", null, "Related APIs (" + related.length + ")"));
-		if (!related.length) {
-			wrap.appendChild(emptyMsg("No APIs reference this DocType."));
-		}
-		related.forEach(function (a) {
-			const link = el("div", "fd-related-link", a.route);
-			link.onclick = function () {
-				openApi(a);
-			};
-			wrap.appendChild(link);
-		});
-		state.relatedEl.appendChild(wrap);
 	}
 
 	// ---- boot ----
