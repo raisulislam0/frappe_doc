@@ -4,7 +4,7 @@ authors = [
     { name = "raisul.aust1@gmail.com", email = "raisul.aust1@gmail.com"}
 ]
 description = "Frappe API and DocType Documentation"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
