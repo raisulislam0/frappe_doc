@@ -66,10 +66,11 @@ You get **Swagger-like documentation** — but built for the Frappe ecosystem, r
 cd /path/to/frappe-bench
 
 # Get the app
-bench get-app frappe_doc https://github.com/your-username/frappe_doc
+bench get-app https://github.com/raisulislam0/frappe_doc.git
 
 # Install on your site
 bench --site yoursite.com install-app frappe_doc
+bench --site yoursite.com migrate
 
 # Clear cache to register the new page
 bench --site yoursite.com clear-cache
@@ -485,11 +486,6 @@ Stop treating your Frappe backend like a black box.
 **frappe_doc** gives every developer on your team — whether they're building JavaScript frontends, writing Python integrations, or onboarding as a new hire — a single, searchable, interactive portal to understand and test every API in your entire Frappe ecosystem.
 
 All it takes is writing clean Python code the way you already should be. Add type hints. Add a docstring. frappe_doc does the rest.
-
-```bash
-bench get-app frappe_doc https://github.com/your-username/frappe_doc
-bench --site yoursite.com install-app frappe_doc
-```
 
 Then open `/doc` in your browser. That's it. 🚀
 
