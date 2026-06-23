@@ -48,7 +48,7 @@
 
 .fd-tab.active {
 	color: var(--fd-primary);
-	background: var(--fd-hover);
+	background: rgb(191, 191, 191);
 	border-bottom-color: var(--fd-primary);
 }
 
@@ -300,6 +300,7 @@
 .fd-copy:hover {
 	color: var(--fd-primary);
 	border-color: var(--fd-primary);
+	background: rgb(191, 191, 191);
 }
 
 .fd-meta {
@@ -513,6 +514,132 @@
 
 .fd-hidden {
 	display: none !important;
+}
+
+.fd-usage {
+	margin-top: 12px;
+	border-top: 1px solid var(--fd-border);
+	padding-top: 10px;
+}
+
+.fd-usage-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--fd-text);
+	cursor: pointer;
+	user-select: none;
+	border-radius: 6px;
+	padding: 4px 6px;
+	margin: 0 -6px;
+}
+
+.fd-usage-header:hover {
+	background: var(--fd-hover);
+}
+
+.fd-usage-arrow {
+	display: inline-block;
+	font-size: 10px;
+	color: var(--fd-muted);
+	transition: transform 0.15s ease;
+	transform: rotate(0deg);
+}
+
+.fd-usage:not(.collapsed) .fd-usage-arrow {
+	transform: rotate(90deg);
+}
+
+.fd-usage.collapsed .fd-usage-body {
+	display: none;
+}
+
+.fd-snippet-tabs {
+	display: flex;
+	gap: 4px;
+	margin: 10px 0 8px 0;
+}
+
+.fd-snippet-tab {
+	border: 1px solid var(--fd-border);
+	background: var(--fd-card-bg);
+	color: var(--fd-muted);
+	padding: 5px 12px;
+	font-size: 12px;
+	font-weight: 600;
+	border-radius: 6px;
+	cursor: pointer;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.fd-snippet-tab:hover {
+	color: var(--fd-text);
+	border-color: var(--fd-primary);
+}
+
+.fd-snippet-tab.active {
+	color: var(--fd-primary);
+	border-color: var(--fd-primary);
+	background: rgb(191, 191, 191);
+}
+
+.fd-snippet-panel {
+	display: none;
+}
+
+.fd-snippet-panel.active {
+	display: block;
+}
+
+.fd-code-block {
+	position: relative;
+	background: var(--fd-hover);
+	border: 1px solid var(--fd-border);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.fd-code-copy {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 1;
+	border: 1px solid var(--fd-border);
+	background: var(--fd-card-bg);
+	color: var(--fd-muted);
+	border-radius: 5px;
+	font-size: 11px;
+	padding: 2px 7px;
+	cursor: pointer;
+}
+
+.fd-code-copy:hover {
+	color: var(--fd-primary);
+	border-color: var(--fd-primary);
+}
+
+.fd-code-block pre {
+	margin: 0;
+	padding: 12px 14px;
+	overflow-x: auto;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--fd-text);
+}
+
+.fd-code-block code {
+	font-family: inherit;
+	white-space: pre;
+}
+
+.fd-snippet-note {
+	font-size: 11px;
+	color: var(--fd-muted);
+	margin: 8px 0 0 0;
+	font-style: italic;
 }
 
 #dev-portal-root mark {

@@ -520,6 +520,155 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		return "fd-m-unknown";
 	}
 
+	function primaryHttpMethod(a) {
+		const methods = a.methods && a.methods.length ? a.methods : ["POST"];
+		return methods[0];
+	}
+
+	function buildFrappeJsSnippet(a) {
+		const lines = [];
+		if (a.allow_guest) {
+			lines.push("// No authentication required for this endpoint");
+		}
+		lines.push("frappe.call({");
+		lines.push('    method: "' + a.module_path + '",');
+		if (a.args && a.args.length) {
+			lines.push("    args: {");
+			a.args.forEach(function (arg, i) {
+				const comma = i < a.args.length - 1 ? "," : "";
+				lines.push('        ' + arg + ': ""' + comma);
+			});
+			lines.push("    },");
+		} else {
+			lines.push("    args: {},");
+		}
+		lines.push("    callback: function(r) {");
+		lines.push("        console.log(r.message);");
+		lines.push("    }");
+		lines.push("});");
+		return lines.join("\n");
+	}
+
+	function buildCurlSnippet(a) {
+		const lines = [];
+		if (a.allow_guest) {
+			lines.push("# No authentication required");
+		}
+		const method = primaryHttpMethod(a);
+		const baseUrl = "https://yoursite.com" + a.route;
+		const args = a.args || [];
+
+		if (method === "GET") {
+			let url = baseUrl;
+			if (args.length) {
+				url +=
+					"?" +
+					args
+						.map(function (arg) {
+							return encodeURIComponent(arg) + "=<value>";
+						})
+						.join("&");
+			}
+			lines.push("curl -X GET \\");
+			lines.push('  "' + url + '"');
+			if (!a.allow_guest) {
+				lines.push('  -H "Authorization: token <api_key>:<api_secret>"');
+			}
+		} else {
+			lines.push("curl -X " + method + " \\");
+			lines.push('  "' + baseUrl + '"');
+			if (!a.allow_guest) {
+				lines.push('  -H "Authorization: token <api_key>:<api_secret>"');
+			}
+			lines.push('  -H "Content-Type: application/x-www-form-urlencoded"');
+			if (args.length) {
+				lines.push(
+					'  -d "' +
+						args
+							.map(function (arg) {
+								return encodeURIComponent(arg) + "=<value>";
+							})
+							.join("&") +
+						'"'
+				);
+			}
+		}
+		return lines.join("\n");
+	}
+
+	function buildCodeBlock(snippetText) {
+		const block = el("div", "fd-code-block");
+		const copyBtn = el("button", "fd-code-copy", "Copy");
+		copyBtn.onclick = function (e) {
+			e.stopPropagation();
+			copyText(snippetText);
+		};
+		const pre = document.createElement("pre");
+		const code = document.createElement("code");
+		code.textContent = snippetText;
+		pre.appendChild(code);
+		block.appendChild(copyBtn);
+		block.appendChild(pre);
+		return block;
+	}
+
+	function buildUsageSection(a) {
+		const frappeSnippet = buildFrappeJsSnippet(a);
+		const curlSnippet = buildCurlSnippet(a);
+
+		const usage = el("div", "fd-usage collapsed");
+		const header = el("div", "fd-usage-header");
+		const arrow = el("span", "fd-usage-arrow", "\u25B6");
+		header.appendChild(arrow);
+		header.appendChild(document.createTextNode("Usage"));
+		header.onclick = function () {
+			usage.classList.toggle("collapsed");
+		};
+		usage.appendChild(header);
+
+		const body = el("div", "fd-usage-body");
+		const tabs = el("div", "fd-snippet-tabs");
+		const tabFrappe = el("button", "fd-snippet-tab active", "Frappe JS");
+		tabFrappe.type = "button";
+		const tabCurl = el("button", "fd-snippet-tab", "curl");
+		tabCurl.type = "button";
+		tabs.appendChild(tabFrappe);
+		tabs.appendChild(tabCurl);
+		body.appendChild(tabs);
+
+		const panelFrappe = el("div", "fd-snippet-panel active");
+		panelFrappe.appendChild(buildCodeBlock(frappeSnippet));
+		const note = el(
+			"p",
+			"fd-snippet-note",
+			"frappe.call() always uses POST under the hood regardless of the logical method type."
+		);
+		panelFrappe.appendChild(note);
+
+		const panelCurl = el("div", "fd-snippet-panel");
+		panelCurl.appendChild(buildCodeBlock(curlSnippet));
+
+		function switchSnippetTab(active) {
+			tabFrappe.classList.toggle("active", active === "frappe");
+			tabCurl.classList.toggle("active", active === "curl");
+			panelFrappe.classList.toggle("active", active === "frappe");
+			panelCurl.classList.toggle("active", active === "curl");
+		}
+		tabFrappe.onclick = function (e) {
+			e.stopPropagation();
+			switchSnippetTab("frappe");
+		};
+		tabCurl.onclick = function (e) {
+			e.stopPropagation();
+			switchSnippetTab("curl");
+		};
+
+		body.appendChild(panelFrappe);
+		body.appendChild(panelCurl);
+		usage.appendChild(body);
+		return usage;
+	}
+
 	function methodBadges(a) {
 		const conf = a.method_confidence || "unknown";
 		const methods = a.methods && a.methods.length ? a.methods : ["POST"];
@@ -615,6 +764,9 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 			});
 			card.appendChild(args);
 		}
+
+		card.appendChild(buildUsageSection(a));
+
 		if (a.docstring) {
 			const d = el("p", "fd-doc");
 			d.innerHTML = hl(a.docstring, term);
