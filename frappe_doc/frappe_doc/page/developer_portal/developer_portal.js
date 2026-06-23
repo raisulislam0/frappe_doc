@@ -10,19 +10,35 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 	const DT_LIST = "frappe_doc.api.doctype_schema.get_all_doctypes";
 	const DT_SCHEMA = "frappe_doc.api.doctype_schema.get_doctype_schema";
 
+	const API_SCOPES = [
+		"All",
+		"App",
+		"Module",
+		"Filename",
+		"DocType",
+		"Function",
+		"Route",
+		"Args",
+		"Docstring",
+	];
+	const DT_SCOPES = ["All", "DocType", "Module"];
+	const FIELD_SCOPES = ["All", "Fieldname", "Label", "Fieldtype"];
+
 	const state = {
 		activeTab: "api",
 		apis: null,
 		doctypes: null,
 		selectedDoctype: null,
 		schemaCache: {},
+		apiScope: "All",
 		apiSearch: "",
+		doctypeScope: "All",
 		doctypeSearch: "",
+		fieldScope: "All",
 		fieldSearch: "",
 		collapsedGroups: {},
 		inflight: {},
 		_loadingEl: null,
-		_apiTimer: null,
 	};
 
 	// ---- shell injection (template provides <style> + #dev-portal-root) ----
@@ -62,6 +78,18 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 	function emptyMsg(t) {
 		return el("div", "fd-empty", t);
 	}
+	function emptyState(term, scope, onClear) {
+		const w = el("div", "fd-empty");
+		w.appendChild(document.createTextNode("No results for '" + (term || "") + "' in " + scope + ". "));
+		const link = el("a", "fd-clear-link", "Clear search");
+		link.href = "#";
+		link.onclick = function (e) {
+			e.preventDefault();
+			onClear();
+		};
+		w.appendChild(link);
+		return w;
+	}
 	function showError(container, msg) {
 		container = container || ui.content;
 		container.innerHTML = "";
@@ -74,6 +102,59 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		return "fd-api-" + slug(api.route);
 	}
 
+	// ---- compound scope + search control ----
+	function makeSearch(cfg) {
+		const wrap = el("div", "fd-search-wrap");
+		const select = el("select", "fd-scope");
+		cfg.scopes.forEach(function (s) {
+			const o = document.createElement("option");
+			o.value = s;
+			o.textContent = s;
+			if (s === cfg.scope) o.selected = true;
+			select.appendChild(o);
+		});
+		const input = el("input", "fd-search-input");
+		input.type = "text";
+		input.placeholder = cfg.placeholder || "Search...";
+		input.value = cfg.term || "";
+
+		let timer = null;
+		select.onchange = function () {
+			cfg.onChange(select.value, input.value.trim());
+		};
+		input.oninput = function () {
+			clearTimeout(timer);
+			timer = setTimeout(function () {
+				cfg.onChange(select.value, input.value.trim());
+			}, 300);
+		};
+		input.onkeydown = function (e) {
+			if (e.key === "Tab" && !e.shiftKey) {
+				e.preventDefault();
+				select.focus();
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				input.value = "";
+				cfg.onChange(select.value, "");
+				input.focus();
+			}
+		};
+
+		wrap.appendChild(select);
+		wrap.appendChild(input);
+		return {
+			wrap: wrap,
+			select: select,
+			input: input,
+			clear: function () {
+				input.value = "";
+				select.value = cfg.scopes[0];
+				cfg.onChange(cfg.scopes[0], "");
+				input.focus();
+			},
+		};
+	}
+
 	// ---- skeleton ----
 	const ui = {};
 	const tabs = el("div", "fd-tabs");
@@ -84,11 +165,12 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 
 	const body = el("div", "fd-body");
 	const sidebar = el("aside", "fd-sidebar");
-	ui.sideSearch = el("input", "fd-sidebar-search");
-	ui.sideSearch.type = "text";
+	ui.sideTools = el("div", "fd-side-tools");
+	ui.sideCount = el("div", "fd-count fd-side-count");
 	ui.mobileSelect = el("select", "fd-mobile-select");
 	ui.sideList = el("div", "fd-sidebar-list");
-	sidebar.appendChild(ui.sideSearch);
+	sidebar.appendChild(ui.sideTools);
+	sidebar.appendChild(ui.sideCount);
 	sidebar.appendChild(ui.mobileSelect);
 	sidebar.appendChild(ui.sideList);
 
@@ -158,14 +240,43 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		state.activeTab = tab;
 		ui.tabApi.classList.toggle("active", tab === "api");
 		ui.tabDt.classList.toggle("active", tab === "doctype");
-		ui.sideSearch.value = tab === "api" ? state.apiSearch : state.doctypeSearch;
-		ui.sideSearch.placeholder = tab === "api" ? "Search APIs..." : "Search DocTypes...";
+		// Option lists differ per tab, so reset scope + term on every switch.
+		state.apiScope = "All";
+		state.apiSearch = "";
+		state.doctypeScope = "All";
+		state.doctypeSearch = "";
+		state.fieldScope = "All";
+		state.fieldSearch = "";
 		updateHash();
 		renderTab();
 	}
 	function renderTab() {
+		buildSidebarTools();
 		if (state.activeTab === "api") renderApiTab();
 		else renderDoctypeTab();
+	}
+
+	function buildSidebarTools() {
+		ui.sideTools.innerHTML = "";
+		ui.sideCount.textContent = "";
+		if (state.activeTab === "doctype") {
+			state.sideSearchCtl = makeSearch({
+				scopes: DT_SCOPES,
+				scope: state.doctypeScope,
+				term: state.doctypeSearch,
+				placeholder: "Search doctypes...",
+				onChange: function (s, t) {
+					state.doctypeScope = s;
+					state.doctypeSearch = t;
+					renderDoctypeSidebar();
+				},
+			});
+			ui.sideTools.appendChild(state.sideSearchCtl.wrap);
+			ui.sideCount.style.display = "";
+		} else {
+			state.sideSearchCtl = null;
+			ui.sideCount.style.display = "none";
+		}
 	}
 
 	ui.tabApi.onclick = function () {
@@ -173,20 +284,6 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 	};
 	ui.tabDt.onclick = function () {
 		switchTab("doctype");
-	};
-	ui.sideSearch.oninput = function () {
-		const v = this.value;
-		if (state.activeTab === "api") {
-			clearTimeout(state._apiTimer);
-			state._apiTimer = setTimeout(function () {
-				state.apiSearch = v;
-				renderApiSidebar();
-				renderApiResults();
-			}, 300);
-		} else {
-			state.doctypeSearch = v;
-			renderDoctypeSidebar();
-		}
 	};
 
 	function copyText(t) {
@@ -215,13 +312,25 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 	function buildApiContent() {
 		ui.content.innerHTML = "";
 		const toolbar = el("div", "fd-toolbar");
-		const spacer = el("div");
-		spacer.style.flex = "1 1 auto";
+		state.apiSearchCtl = makeSearch({
+			scopes: API_SCOPES,
+			scope: state.apiScope,
+			term: state.apiSearch,
+			placeholder: "Search endpoints...",
+			onChange: function (s, t) {
+				state.apiScope = s;
+				state.apiSearch = t;
+				renderApiSidebar();
+				renderApiResults();
+			},
+		});
+		toolbar.appendChild(state.apiSearchCtl.wrap);
 		const refresh = el("button", "fd-btn", "Refresh Cache");
 		refresh.onclick = forceRescan;
-		toolbar.appendChild(spacer);
 		toolbar.appendChild(refresh);
 		ui.content.appendChild(toolbar);
+		state.apiCountEl = el("div", "fd-count");
+		ui.content.appendChild(state.apiCountEl);
 		state.apiResultsEl = el("div", "fd-results");
 		ui.content.appendChild(state.apiResultsEl);
 	}
@@ -263,23 +372,37 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		);
 	}
 
-	function matchApi(api, t) {
-		if (!t) return true;
-		const hay = [
-			api.route,
-			api.function,
-			(api.args || []).join(" "),
-			api.docstring || "",
-			api.doctype || "",
-		]
-			.join(" ")
-			.toLowerCase();
-		return hay.indexOf(t) !== -1;
+	function apiHaystacks(a) {
+		return {
+			App: a.app || "",
+			Module: a.module_path || "",
+			Filename: a.file || "",
+			DocType: a.doctype || "",
+			Function: a.function || "",
+			Route: a.route || "",
+			Args: (a.args || []).join(" "),
+			Docstring: a.docstring || "",
+		};
+	}
+	function matchApiScoped(a, scope, term) {
+		if (!term) return true;
+		const h = apiHaystacks(a);
+		let hay;
+		if (scope === "All") {
+			hay = Object.keys(h)
+				.map(function (k) {
+					return h[k];
+				})
+				.join(" ");
+		} else {
+			hay = h[scope] || "";
+		}
+		return hay.toLowerCase().indexOf(term) !== -1;
 	}
 	function filteredApis() {
-		const t = state.apiSearch.trim().toLowerCase();
+		const term = state.apiSearch.trim().toLowerCase();
 		return (state.apis || []).filter(function (a) {
-			return matchApi(a, t);
+			return matchApiScoped(a, state.apiScope, term);
 		});
 	}
 
@@ -289,6 +412,10 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		if (state.apis === null) return;
 		const term = state.apiSearch.trim();
 		const apis = filteredApis();
+		if (!apis.length) {
+			ui.sideList.appendChild(emptyMsg("No matching endpoints."));
+			return;
+		}
 		const groups = {};
 		apis.forEach(function (a) {
 			const key = a.doctype || "Uncategorized";
@@ -338,13 +465,10 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 			ui.mobileSelect.appendChild(og);
 		});
 		ui.mobileSelect.onchange = function () {
-			const a = (state.apis || []).filter(
-				(function (route) {
-					return function (x) {
-						return x.route === route;
-					};
-				})(this.value)
-			)[0];
+			const route = this.value;
+			const a = (state.apis || []).filter(function (x) {
+				return x.route === route;
+			})[0];
 			if (a) scrollToCard(a);
 		};
 	}
@@ -357,20 +481,26 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 	function renderApiResults() {
 		const c = state.apiResultsEl;
 		c.innerHTML = "";
-		const term = state.apiSearch.trim();
+		const all = state.apis || [];
 		const apis = filteredApis();
+		if (state.apiCountEl) {
+			state.apiCountEl.textContent =
+				"Showing " + apis.length + " of " + all.length + " endpoints";
+		}
 		if (!apis.length) {
-			c.appendChild(
-				emptyMsg(
-					(state.apis || []).length
-						? "No APIs match your search."
-						: "No whitelisted APIs found."
-				)
-			);
+			if (all.length) {
+				c.appendChild(
+					emptyState(state.apiSearch, state.apiScope, function () {
+						state.apiSearchCtl.clear();
+					})
+				);
+			} else {
+				c.appendChild(emptyMsg("No whitelisted APIs found."));
+			}
 			return;
 		}
 		apis.forEach(function (a) {
-			c.appendChild(buildApiCard(a, term));
+			c.appendChild(buildApiCard(a, state.apiSearch));
 		});
 	}
 
@@ -461,7 +591,14 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		card.appendChild(head);
 
 		const meta = el("div", "fd-meta");
-		meta.innerHTML = esc(a.app) + " &middot; " + esc(a.file) + ":" + esc(a.line);
+		meta.innerHTML =
+			hl(a.app, term) +
+			" &middot; " +
+			hl(a.module_path, term) +
+			" &middot; " +
+			hl(a.file, term) +
+			":" +
+			esc(a.line);
 		card.appendChild(meta);
 
 		if (a.args && a.args.length) {
@@ -509,20 +646,24 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 	function buildDoctypeContent() {
 		ui.content.innerHTML = "";
 		const toolbar = el("div", "fd-toolbar");
-		const fs = el("input", "fd-content-search");
-		fs.type = "text";
-		fs.placeholder = "Search fields in this DocType...";
-		fs.value = state.fieldSearch;
-		fs.oninput = function () {
-			state.fieldSearch = this.value;
-			renderFieldArea();
-		};
-		state.fieldSearchInput = fs;
-		toolbar.appendChild(fs);
+		state.fieldSearchCtl = makeSearch({
+			scopes: FIELD_SCOPES,
+			scope: state.fieldScope,
+			term: state.fieldSearch,
+			placeholder: "Search fields in this DocType...",
+			onChange: function (s, t) {
+				state.fieldScope = s;
+				state.fieldSearch = t;
+				renderFieldArea();
+			},
+		});
+		toolbar.appendChild(state.fieldSearchCtl.wrap);
 		ui.content.appendChild(toolbar);
+		state.fieldCountEl = el("div", "fd-count");
 		state.statsEl = el("div");
 		state.treeEl = el("div");
 		state.relatedEl = el("div");
+		ui.content.appendChild(state.fieldCountEl);
 		ui.content.appendChild(state.statsEl);
 		ui.content.appendChild(state.treeEl);
 		ui.content.appendChild(state.relatedEl);
@@ -546,21 +687,41 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		);
 	}
 
+	function matchDtScoped(d, scope, term) {
+		if (!term) return true;
+		let hay;
+		if (scope === "DocType") hay = d.name || "";
+		else if (scope === "Module") hay = d.module || "";
+		else hay = (d.name || "") + " " + (d.module || "");
+		return hay.toLowerCase().indexOf(term) !== -1;
+	}
+
 	function renderDoctypeSidebar() {
 		ui.sideList.innerHTML = "";
 		ui.mobileSelect.innerHTML = "";
 		if (state.doctypes === null) return;
 		const term = state.doctypeSearch.trim();
 		const low = term.toLowerCase();
-		const list = state.doctypes.filter(function (d) {
-			return !low || d.name.toLowerCase().indexOf(low) !== -1;
+		const all = state.doctypes || [];
+		const list = all.filter(function (d) {
+			return matchDtScoped(d, state.doctypeScope, low);
 		});
+		ui.sideCount.textContent = "Showing " + list.length + " of " + all.length + " doctypes";
+		if (!list.length) {
+			ui.sideList.appendChild(
+				emptyState(state.doctypeSearch, state.doctypeScope, function () {
+					if (state.sideSearchCtl) state.sideSearchCtl.clear();
+				})
+			);
+			return;
+		}
 		list.forEach(function (d) {
 			const it = el("div", "fd-side-item");
 			if (d.name === state.selectedDoctype) it.classList.add("active");
 			const nm = el("span");
 			nm.innerHTML = hl(d.name, term);
-			const sub = el("span", "fd-side-sub", d.module || "");
+			const sub = el("span", "fd-side-sub");
+			sub.innerHTML = hl(d.module || "", term);
 			it.appendChild(nm);
 			it.appendChild(sub);
 			it.onclick = function () {
@@ -588,16 +749,23 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 
 	function renderDoctypeContent() {
 		if (!state.selectedDoctype) {
+			state.fieldCountEl.textContent = "";
 			state.statsEl.innerHTML = "";
 			state.relatedEl.innerHTML = "";
 			state.treeEl.innerHTML = "";
 			state.treeEl.appendChild(
 				emptyMsg("Select a DocType from the sidebar to view its fields.")
 			);
-			if (state.fieldSearchInput) state.fieldSearchInput.disabled = true;
+			if (state.fieldSearchCtl) {
+				state.fieldSearchCtl.input.disabled = true;
+				state.fieldSearchCtl.select.disabled = true;
+			}
 			return;
 		}
-		if (state.fieldSearchInput) state.fieldSearchInput.disabled = false;
+		if (state.fieldSearchCtl) {
+			state.fieldSearchCtl.input.disabled = false;
+			state.fieldSearchCtl.select.disabled = false;
+		}
 
 		if (state.schemaCache[state.selectedDoctype]) {
 			renderFieldArea();
@@ -612,6 +780,7 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 			function (msg) {
 				hideLoading();
 				if (msg && msg.error) {
+					state.fieldCountEl.textContent = "";
 					state.statsEl.innerHTML = "";
 					state.relatedEl.innerHTML = "";
 					showError(state.treeEl, msg.error);
@@ -646,14 +815,22 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		return s;
 	}
 
-	function flatten(fields, path, t, out) {
+	function matchFieldScoped(f, scope, term) {
+		if (!term) return true;
+		let hay;
+		if (scope === "Fieldname") hay = f.fieldname || "";
+		else if (scope === "Label") hay = f.label || "";
+		else if (scope === "Fieldtype") hay = f.fieldtype || "";
+		else hay = (f.fieldname || "") + " " + (f.label || "");
+		return hay.toLowerCase().indexOf(term) !== -1;
+	}
+
+	function flatten(fields, path, term, scope, out) {
 		fields.forEach(function (f) {
-			const name = (f.fieldname || "").toLowerCase();
-			const label = (f.label || "").toLowerCase();
-			if (name.indexOf(t) !== -1 || label.indexOf(t) !== -1) {
+			if (matchFieldScoped(f, scope, term)) {
 				out.push({ field: f, path: path.concat([f.fieldname]) });
 			}
-			if (f.children) flatten(f.children, path.concat([f.fieldname]), t, out);
+			if (f.children) flatten(f.children, path.concat([f.fieldname]), term, scope, out);
 		});
 	}
 
@@ -673,7 +850,9 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		if (f.options && (f.fieldtype === "Link" || f.fieldtype.indexOf("Table") === 0)) {
 			typeText += " \u2192 " + f.options;
 		}
-		row.appendChild(badge("fd-badge fd-badge-type", typeText));
+		const tb = el("span", "fd-badge fd-badge-type");
+		tb.innerHTML = hl(typeText, term);
+		row.appendChild(tb);
 		if (f.reqd) row.appendChild(badge("fd-badge fd-badge-reqd", "reqd"));
 		if (f.in_list_view) row.appendChild(badge("fd-badge fd-badge-list", "in_list_view"));
 		return row;
@@ -725,12 +904,19 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 			"</b></span>";
 
 		state.treeEl.innerHTML = "";
-		const term = state.fieldSearch.trim();
+		const rawTerm = state.fieldSearch.trim();
+		const term = rawTerm.toLowerCase();
 		if (term) {
 			const flat = [];
-			flatten(fields, [], term.toLowerCase(), flat);
+			flatten(fields, [], term, state.fieldScope, flat);
+			state.fieldCountEl.textContent =
+				"Showing " + flat.length + " of " + st.total + " fields";
 			if (!flat.length) {
-				state.treeEl.appendChild(emptyMsg("No fields match."));
+				state.treeEl.appendChild(
+					emptyState(state.fieldSearch, state.fieldScope, function () {
+						state.fieldSearchCtl.clear();
+					})
+				);
 				return;
 			}
 			flat.forEach(function (item) {
@@ -738,10 +924,12 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 				const bc = el("div", "fd-breadcrumb");
 				bc.textContent = [state.selectedDoctype].concat(item.path).join(" \u203A ");
 				w.appendChild(bc);
-				w.appendChild(buildFieldRow(item.field, 0, term, false));
+				w.appendChild(buildFieldRow(item.field, 0, rawTerm, false));
 				state.treeEl.appendChild(w);
 			});
 		} else {
+			state.fieldCountEl.textContent =
+				"Showing " + st.total + " of " + st.total + " fields";
 			renderNodes(fields, 0, state.treeEl, "");
 		}
 	}
@@ -787,7 +975,5 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 	state.selectedDoctype = init.doctype;
 	ui.tabApi.classList.toggle("active", state.activeTab === "api");
 	ui.tabDt.classList.toggle("active", state.activeTab === "doctype");
-	ui.sideSearch.placeholder =
-		state.activeTab === "api" ? "Search APIs..." : "Search DocTypes...";
 	renderTab();
 };
