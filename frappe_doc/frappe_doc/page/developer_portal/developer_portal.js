@@ -311,6 +311,7 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 
 	function buildApiContent() {
 		ui.content.innerHTML = "";
+		const head = el("div", "fd-content-head");
 		const toolbar = el("div", "fd-toolbar");
 		state.apiSearchCtl = makeSearch({
 			scopes: API_SCOPES,
@@ -328,11 +329,15 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 		const refresh = el("button", "fd-btn", "Refresh Cache");
 		refresh.onclick = forceRescan;
 		toolbar.appendChild(refresh);
-		ui.content.appendChild(toolbar);
 		state.apiCountEl = el("div", "fd-count");
-		ui.content.appendChild(state.apiCountEl);
+		head.appendChild(toolbar);
+		head.appendChild(state.apiCountEl);
+		ui.content.appendChild(head);
+
+		const bodyEl = el("div", "fd-content-body");
 		state.apiResultsEl = el("div", "fd-results");
-		ui.content.appendChild(state.apiResultsEl);
+		bodyEl.appendChild(state.apiResultsEl);
+		ui.content.appendChild(bodyEl);
 	}
 
 	function fetchApis(cb) {
@@ -638,6 +643,7 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 
 	function buildDoctypeContent() {
 		ui.content.innerHTML = "";
+		const head = el("div", "fd-content-head");
 		const toolbar = el("div", "fd-toolbar");
 		state.fieldSearchCtl = makeSearch({
 			scopes: FIELD_SCOPES,
@@ -651,13 +657,17 @@ frappe.pages["developer_portal"].on_page_load = function (wrapper) {
 			},
 		});
 		toolbar.appendChild(state.fieldSearchCtl.wrap);
-		ui.content.appendChild(toolbar);
 		state.fieldCountEl = el("div", "fd-count");
+		head.appendChild(toolbar);
+		head.appendChild(state.fieldCountEl);
+		ui.content.appendChild(head);
+
+		const bodyEl = el("div", "fd-content-body");
 		state.statsEl = el("div");
 		state.treeEl = el("div");
-		ui.content.appendChild(state.fieldCountEl);
-		ui.content.appendChild(state.statsEl);
-		ui.content.appendChild(state.treeEl);
+		bodyEl.appendChild(state.statsEl);
+		bodyEl.appendChild(state.treeEl);
+		ui.content.appendChild(bodyEl);
 	}
 
 	function fetchDoctypes(cb) {
