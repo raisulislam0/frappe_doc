@@ -274,20 +274,16 @@ Use fenced JSON code blocks for the best rendering:
 
 ```
     Example Request:
-        ```json
         {
             "employee": "EMP-001",
             "leave_type": "Casual Leave"
         }
-        ```
 
     Example Response:
-        ```json
         {
             "status": "success",
             "application": "HR-LAP-2024-00001"
         }
-        ```
 ```
 
 Or inline JSON (frappe_doc will auto-detect and pretty-print it):
@@ -337,7 +333,6 @@ def apply_for_leave(
         frappe.PermissionError: If the user is not authorized to apply leave for this employee.
 
     Example Request:
-        ```json
         {
             "employee": "EMP-0001",
             "leave_type": "Casual Leave",
@@ -345,16 +340,13 @@ def apply_for_leave(
             "to_date": "2024-08-03",
             "reason": "Family function"
         }
-        ```
 
     Example Response:
-        ```json
         {
             "status": "success",
             "name": "HR-LAP-2024-00042",
             "message": "Leave Application submitted successfully."
         }
-        ```
     """
     # ... implementation ...
 ```
