@@ -419,7 +419,7 @@
 }
 
 .fd-stats b {
-	color: var(--fd-primary);
+	color: var(--text-color);
 }
 
 .fd-field-row {
@@ -715,7 +715,7 @@
 	padding: 2px 7px;
 	border-radius: 999px;
 	background: linear-gradient(135deg, rgba(79,70,229,0.18), rgba(147,51,234,0.18));
-	color: var(--fd-primary);
+	color: var(--text-color);
 	border: 1px solid rgba(79,70,229,0.25);
 	letter-spacing: 0.5px;
 }
@@ -725,7 +725,7 @@
 	display: grid;
 	grid-template-columns: 130px 1fr;
 	align-items: center;
-	gap: 8px;
+	gap: 17px;
 }
 .fd-arg-input-label {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -734,6 +734,10 @@
 	color: var(--fd-text);
 	text-align: right;
 	padding-right: 4px;
+	text-wrap: wrap;
+	overflow: hidden;
+	text-overflow: wrap;
+	max-width: 200px;
 }
 .fd-arg-input-label small {
 	display: block;
