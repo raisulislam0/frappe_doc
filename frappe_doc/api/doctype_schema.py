@@ -7,12 +7,15 @@ Setters are reflected automatically.
 import frappe
 from frappe import _
 
+from .api_scanner import check_permission
+
 _CHILD_TABLE_TYPES = ("Table", "Table MultiSelect")
 
 
 @frappe.whitelist()
 def get_all_doctypes():
 	"""Return every DocType name with its module, sorted by name."""
+	check_permission()
 	return frappe.get_all(
 		"DocType",
 		fields=["name", "module"],
@@ -27,6 +30,7 @@ def get_doctype_schema(doctype):
 	Returns a clean ``{"error": ...}`` dict when the DocType does not exist
 	instead of raising.
 	"""
+	check_permission()
 	try:
 		meta = frappe.get_meta(doctype)
 	except Exception:

@@ -10,11 +10,7 @@
  "name": "developer_portal",
  "owner": "Administrator",
  "page_name": "developer_portal",
- "roles": [
-  {
-   "role": "System Manager"
-  }
- ],
+ "roles": [],
  "route": "doc",
  "script": null,
  "standard": "Yes",
